@@ -5,19 +5,22 @@ import (
 	"crypto/rand"
 	"fmt"
 	"maps"
+	"math"
 	"math/big"
 	"slices"
 	"sync"
 )
 
 type LoadBalancer struct {
-	mu         *sync.RWMutex
-	components map[string]component
+	mu             *sync.RWMutex
+	components     map[string]component
+	smallestBounds float64
 }
 
 func NewLoadBalancer() *LoadBalancer {
 	return &LoadBalancer{
-		mu: new(sync.RWMutex),
+		mu:         new(sync.RWMutex),
+		components: make(map[string]component),
 	}
 }
 
@@ -44,6 +47,7 @@ func (b *LoadBalancer) recomputeComponentBounds() {
 	//
 	// No component can have overlapping weights.
 	prevUpperBound := float64(0)
+	b.smallestBounds = 0
 	for i, component := range sortedComponents {
 		component.lowerBound = prevUpperBound
 		component.upperBound = prevUpperBound + (float64(component.weight) / float64(totalWeights))
@@ -55,6 +59,12 @@ func (b *LoadBalancer) recomputeComponentBounds() {
 
 		b.components[component.id] = component
 
+		// Set the smallest bounds to the upper bound of the component with the smallest weight
+		// i.e smallestBounds = upperBound - 0
+		if i == 0 {
+			b.smallestBounds = component.upperBound
+		}
+
 		prevUpperBound = component.upperBound
 	}
 }
@@ -62,6 +72,10 @@ func (b *LoadBalancer) recomputeComponentBounds() {
 func (b *LoadBalancer) Register(id string, weight int) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if weight < 0 {
+		return ErrNegativeComponentWeight
+	}
 
 	// Update the component weight in the components list
 	c, ok := b.components[id]
@@ -92,12 +106,26 @@ func (b *LoadBalancer) Unregister(id string) error {
 	return nil
 }
 
+// selectionPrecision returns enough random values to select even the component
+// with the smallest range, while retaining the default minimum precision.
+func (b *LoadBalancer) selectionPrecision() int64 {
+	precision := math.Max(defaultSelectionPrecision, math.Ceil(1/b.smallestBounds))
+	if precision >= math.MaxInt64 {
+		return math.MaxInt64
+	}
+
+	return int64(precision)
+}
+
 func (b *LoadBalancer) Select() (string, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	// Generate a random number between 0 and 10_000
-	maxInt := new(big.Int).SetInt64(10_000)
+	if len(b.components) == 0 {
+		return "", ErrNoComponentsRegistered
+	}
+
+	maxInt := new(big.Int).SetInt64(b.selectionPrecision())
 	randInt, err := rand.Int(rand.Reader, maxInt)
 	if err != nil {
 		return "", fmt.Errorf("unable to generate random number: %w", err)
@@ -106,11 +134,11 @@ func (b *LoadBalancer) Select() (string, error) {
 	// Calculate randInt/maxInt
 	quotient := new(big.Float).Quo(new(big.Float).SetInt(randInt), new(big.Float).SetInt(maxInt))
 
-	// Select the component with lowerBound <= quotient <= upperBound
+	// Select the component with lowerBound <= quotient < upperBound
 	for _, component := range b.components {
 		lowerBound := new(big.Float).SetFloat64(component.lowerBound)
 		upperBound := new(big.Float).SetFloat64(component.upperBound)
-		if quotient.Cmp(lowerBound) >= 0 && quotient.Cmp(upperBound) <= 0 {
+		if quotient.Cmp(lowerBound) >= 0 && quotient.Cmp(upperBound) < 0 {
 			return component.id, nil
 		}
 	}
