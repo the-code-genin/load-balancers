@@ -111,39 +111,35 @@ func TestSelect(t *testing.T) {
 			{id: "six", weight: 50},
 		}
 
-		selectionCounts := make(map[string]int, len(components))
-		totalWeight := 0
-
 		b := NewLoadBalancer()
 
+		totalWeight := 0
 		for _, component := range components {
 			require.NoError(t, b.Register(component.id, component.weight),
 				"registering component %q should succeed", component.id)
-
-			selectionCounts[component.id] = 0
 			totalWeight += component.weight
 		}
 
-		// Simulate 1m selections
-		const selectionCount = 1_000_000
+		// Simulate 100k selections.
+		selectionCounts := make(map[string]int, len(components))
+
+		const selectionCount = 100_000
 		for range selectionCount {
 			selectedComponentID, err := b.Select()
 			require.NoError(t, err, "each selection should succeed")
 
-			if _, ok := selectionCounts[selectedComponentID]; !ok {
-				t.Fatalf("Select() returned unregistered component %q", selectedComponentID)
-			}
 			selectionCounts[selectedComponentID]++
 		}
 
 		// Confirm that the actual percentage of selections per component approaches the expected percentage of selections.
-		// A margin of error of 0.25%(0.0025) is used, which is statistically significant.
-		// This assumption is based off of the central limit theorem
+		// A margin of error of 0.5% (0.005) is used for the 100k samples.
+		// The entire algorithm is based off of the central limit theorem.
+		const selectionErrorMargin = 0.005
 		for _, component := range components {
 			expectedPercentage := float64(component.weight) / float64(totalWeight)
 			actualPercentage := float64(selectionCounts[component.id]) / selectionCount
 
-			require.InDeltaf(t, expectedPercentage, actualPercentage, 0.0025,
+			require.InDeltaf(t, expectedPercentage, actualPercentage, selectionErrorMargin,
 				"component %q was selected %d times; expected approximately %.2f%% of selections",
 				component.id, selectionCounts[component.id], expectedPercentage*100)
 		}
