@@ -96,10 +96,11 @@ func TestSelect(t *testing.T) {
 		}
 		components := []weightedComponent{
 			{id: "one", weight: 5},
-			{id: "two", weight: 10},
-			{id: "three", weight: 15},
-			{id: "four", weight: 20},
-			{id: "five", weight: 50},
+			{id: "two", weight: 5},
+			{id: "three", weight: 10},
+			{id: "four", weight: 15},
+			{id: "five", weight: 25},
+			{id: "six", weight: 50},
 		}
 
 		selectionCounts := make(map[string]int, len(components))
@@ -128,6 +129,7 @@ func TestSelect(t *testing.T) {
 		}
 
 		// Confirm that the actual percentage of selections per component approaches the expected percentage of selections.
+		// A margin of error of 0.25%(0.0025) is used, which is statistically significant.
 		// This assumption is based off of the central limit theorem
 		for _, component := range components {
 			expectedPercentage := float64(component.weight) / float64(totalWeight)
