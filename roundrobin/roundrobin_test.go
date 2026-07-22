@@ -68,6 +68,78 @@ func TestUnregister(t *testing.T) {
 	})
 }
 
+func TestSelect(t *testing.T) {
+	t.Run("returns an error when no components are registered", func(t *testing.T) {
+		b := NewLoadBalancer()
+
+		_, err := b.Select()
+		require.ErrorIs(t, err, ErrNoComponentsRegistered,
+			"selecting from an empty load balancer should return the expected error")
+	})
+
+	t.Run("returns a registered component", func(t *testing.T) {
+		const componentID = "api"
+
+		b := NewLoadBalancer()
+		require.NoError(t, b.Register(componentID, 1), "component registration should succeed")
+
+		selectedComponentID, err := b.Select()
+		require.NoError(t, err, "selecting from a load balancer with a component should succeed")
+		require.Equal(t, componentID, selectedComponentID, "the only registered component should always be selected")
+	})
+
+	t.Run("selects components according to their weights", func(t *testing.T) {
+		// Register the components
+		type weightedComponent struct {
+			id     string
+			weight int
+		}
+		components := []weightedComponent{
+			{id: "one", weight: 5},
+			{id: "two", weight: 10},
+			{id: "three", weight: 15},
+			{id: "four", weight: 20},
+			{id: "five", weight: 50},
+		}
+
+		selectionCounts := make(map[string]int, len(components))
+		totalWeight := 0
+
+		b := NewLoadBalancer()
+
+		for _, component := range components {
+			require.NoError(t, b.Register(component.id, component.weight),
+				"registering component %q should succeed", component.id)
+
+			selectionCounts[component.id] = 0
+			totalWeight += component.weight
+		}
+
+		// Simulate 1m selections
+		const selectionCount = 1_000_000
+		for range selectionCount {
+			selectedComponentID, err := b.Select()
+			require.NoError(t, err, "each selection should succeed")
+
+			if _, ok := selectionCounts[selectedComponentID]; !ok {
+				t.Fatalf("Select() returned unregistered component %q", selectedComponentID)
+			}
+			selectionCounts[selectedComponentID]++
+		}
+
+		// Confirm that the actual percentage of selections per component approaches the expected percentage of selections.
+		// This assumption is based off of the central limit theorem
+		for _, component := range components {
+			expectedPercentage := float64(component.weight) / float64(totalWeight)
+			actualPercentage := float64(selectionCounts[component.id]) / selectionCount
+
+			require.InDeltaf(t, expectedPercentage, actualPercentage, 0.0025,
+				"component %q was selected %d times; expected approximately %.2f%% of selections",
+				component.id, selectionCounts[component.id], expectedPercentage*100)
+		}
+	})
+}
+
 func Test_recomputeComponentBounds(t *testing.T) {
 	t.Run("tracks smallest bounds", func(t *testing.T) {
 		const (
