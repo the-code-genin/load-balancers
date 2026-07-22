@@ -37,7 +37,15 @@ func TestRegister(t *testing.T) {
 		b := NewLoadBalancer()
 
 		err := b.Register("invalid", -1)
-		require.ErrorIs(t, err, ErrNegativeComponentWeight, "negative weights must be rejected")
+		require.ErrorIs(t, err, ErrNonPositiveComponentWeight, "negative weights must be rejected")
+		require.Empty(t, b.components, "a rejected component must not be registered")
+	})
+
+	t.Run("rejects zero weights", func(t *testing.T) {
+		b := NewLoadBalancer()
+
+		err := b.Register("invalid", 0)
+		require.ErrorIs(t, err, ErrNonPositiveComponentWeight, "zero weights must be rejected")
 		require.Empty(t, b.components, "a rejected component must not be registered")
 	})
 }

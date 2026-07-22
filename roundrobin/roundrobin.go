@@ -73,8 +73,8 @@ func (b *LoadBalancer) Register(id string, weight int) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if weight < 0 {
-		return ErrNegativeComponentWeight
+	if weight <= 0 {
+		return ErrNonPositiveComponentWeight
 	}
 
 	// Update the component weight in the components list
