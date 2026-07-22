@@ -1,4 +1,4 @@
-package weighted
+package weightedrandom
 
 type component struct {
 	id         string
