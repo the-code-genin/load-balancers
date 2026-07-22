@@ -25,7 +25,7 @@ func NewLoadBalancer() *LoadBalancer {
 }
 
 func (b *LoadBalancer) recomputeComponentBounds() {
-	// Recalculate the total weight for all components
+	// Calculate the total weight for all components
 	totalWeights := 0
 	for _, component := range b.components {
 		totalWeights += component.weight
@@ -45,7 +45,7 @@ func (b *LoadBalancer) recomputeComponentBounds() {
 	// The lower bound for the component with the lowest weight will be zero
 	// while the upper bound for the component with the highest weight will be 1.
 	//
-	// No component can have overlapping weights.
+	// No component can have overlapping bounds.
 	prevUpperBound := float64(0)
 	b.smallestBounds = 0
 	for i, component := range sortedComponents {
