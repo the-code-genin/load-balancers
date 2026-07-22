@@ -1,4 +1,4 @@
-package roundrobin
+package weighted
 
 type component struct {
 	id         string
